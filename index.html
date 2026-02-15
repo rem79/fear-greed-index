@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 공포와 탐욕 지수 대시보드</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0a0a0c;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a8;
+            --accent-fear: #ff4d4d;
+            --accent-neutral: #ffcc00;
+            --accent-greed: #00e676;
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            background-image:
+                radial-gradient(circle at 20% 20%, rgba(255, 77, 77, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(0, 230, 118, 0.05) 0%, transparent 40%);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        header h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #fff 0%, #a0a0a8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 40px;
+            position: relative;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-title i {
+            font-style: normal;
+        }
+
+        /* Gauge Styles */
+        .gauge-container {
+            position: relative;
+            width: 300px;
+            height: 150px;
+            margin: 0 auto 30px;
+            overflow: hidden;
+        }
+
+        .gauge-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .gauge-arc {
+            fill: none;
+            stroke-width: 20;
+            stroke-linecap: round;
+        }
+
+        .gauge-bg {
+            stroke: rgba(255, 255, 255, 0.1);
+        }
+
+        .gauge-active {
+            stroke: url(#gaugeGradient);
+            stroke-dasharray: 440;
+            stroke-dashoffset: 440;
+            transition: stroke-dashoffset 1.5s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        .gauge-needle {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 4px;
+            height: 130px;
+            background: #fff;
+            border-radius: 4px;
+            transform-origin: bottom center;
+            transform: translateX(-50%) rotate(-90deg);
+            transition: transform 1.5s cubic-bezier(0.19, 1, 0.22, 1);
+            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+        }
+
+        .gauge-needle-base {
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .value-display {
+            text-align: center;
+        }
+
+        .current-value {
+            font-size: 4rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .status-label {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .last-updated {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 10px;
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .info-section {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+
+        .info-section h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .info-item h3 {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .info-item p {
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.6;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.6;
+            }
+        }
+
+        .live-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 230, 118, 0.1);
+            color: var(--accent-greed);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-greed);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .refresh-btn {
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+
+        .refresh-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="live-tag">
+                <div class="live-dot"></div>
+                실시간 데이터
+            </div>
+            <h1>공포와 탐욕 지수</h1>
+            <p>시장 심리를 한눈에 파악하세요</p>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Stock Market Card -->
+            <div class="card" id="stock-card">
+                <div class="card-title">
+                    <span>📈</span> 주식 시장 (S&P 500)
+                </div>
+                <div class="gauge-container">
+                    <svg class="gauge-svg" viewBox="0 0 200 100">
+                        <defs>
+                            <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" style="stop-color:#ff4d4d;stop-opacity:1" />
+                                <stop offset="50%" style="stop-color:#ffcc00;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#00e676;stop-opacity:1" />
+                            </linearGradient>
+                        </defs>
+                        <path class="gauge-arc gauge-bg" d="M 20 90 A 80 80 0 0 1 180 90" />
+                        <path id="stock-gauge-active" class="gauge-arc gauge-active" d="M 20 90 A 80 80 0 0 1 180 90" />
+                    </svg>
+                    <div id="stock-needle" class="gauge-needle"></div>
+                    <div class="gauge-needle-base"></div>
+                </div>
+                <div class="value-display">
+                    <div id="stock-status" class="status-label">공포</div>
+                    <div id="stock-value" class="current-value">36</div>
+                    <div class="legend">
+                        <span>공포</span>
+                        <span>중립</span>
+                        <span>탐욕</span>
+                    </div>
+                    <div id="stock-last-updated" class="last-updated">최종 업데이트: 2026-02-15</div>
+                </div>
+            </div>
+
+            <!-- Crypto Card -->
+            <div class="card" id="crypto-card">
+                <div class="card-title">
+                    <span>₿</span> 암호화폐 시장 (BTC)
+                </div>
+                <div class="gauge-container">
+                    <svg class="gauge-svg" viewBox="0 0 200 100">
+                        <path class="gauge-arc gauge-bg" d="M 20 90 A 80 80 0 0 1 180 90" />
+                        <path id="crypto-gauge-active" class="gauge-arc gauge-active"
+                            d="M 20 90 A 80 80 0 0 1 180 90" />
+                    </svg>
+                    <div id="crypto-needle" class="gauge-needle"></div>
+                    <div class="gauge-needle-base"></div>
+                </div>
+                <div class="value-display">
+                    <div id="crypto-status" class="status-label">극도의 공포</div>
+                    <div id="crypto-value" class="current-value">8</div>
+                    <div class="legend">
+                        <span>공포</span>
+                        <span>중립</span>
+                        <span>탐욕</span>
+                    </div>
+                    <div id="crypto-last-updated" class="last-updated">최종 업데이트: 2026-02-16</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>지수 가이드</h2>
+                <div style="text-align: right; font-size: 0.9rem; color: var(--text-secondary);">
+                    <div id="last-refresh-time">마지막 업데이트: --:--:--</div>
+                    <div id="refresh-timer" style="color: var(--accent-greed);">다음 자동 새로고침: 10분 0초 후</div>
+                </div>
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <h3>0 - 25: 극도의 공포</h3>
+                    <p>투자자들이 매우 비관적이며, 시장이 과매도 상태일 가능성이 높습니다. 종종 매수 기회로 여겨집니다.</p>
+                </div>
+                <div class="info-item">
+                    <h3>26 - 44: 공포</h3>
+                    <p>시장에 매도 압력이 있으며, 투자자들이 위험 자산을 피하려는 경향이 있습니다.</p>
+                </div>
+                <div class="info-item">
+                    <h3>45 - 55: 중립</h3>
+                    <p>강세와 약세의 균형이 맞는 상태입니다.</p>
+                </div>
+                <div class="info-item">
+                    <h3>56 - 74: 탐욕</h3>
+                    <p>투자자들이 낙관적이며, 시장에 자금이 유입되고 있습니다.</p>
+                </div>
+                <div class="info-item">
+                    <h3>75 - 100: 극도의 탐욕</h3>
+                    <p>시장이 과열 상태이며, 거품이 발생했을 가능성이 있습니다. 종종 매도 시점으로 고려됩니다.</p>
+                </div>
+            </div>
+            <button class="refresh-btn" onclick="updateDashboard()">데이터 새로고침</button>
+        </div>
+    </div>
+
+    <script>
+        function setGaugeValue(id, value) {
+            const needle = document.getElementById(id + '-needle');
+            const arc = document.getElementById(id + '-gauge-active');
+
+            // Map 0-100 value to -90 to 90 degrees
+            const degrees = (value / 100) * 180 - 90;
+            needle.style.transform = `translateX(-50%) rotate(${degrees}deg)`;
+
+            // Map 0-100 value to stroke-dashoffset (440 to 0)
+            const offset = 440 - (value / 100) * 440;
+            arc.style.strokeDashoffset = offset;
+
+            // Update status color
+            const statusLabel = document.getElementById(id + '-status');
+            const valueDisplay = document.getElementById(id + '-value');
+
+            let color = '#ffcc00'; // Neutral
+            let statusText = '중립';
+
+            if (value <= 25) {
+                color = '#ff4d4d';
+                statusText = '극도의 공포';
+            } else if (value <= 44) {
+                color = '#ff9800';
+                statusText = '공포';
+            } else if (value >= 75) {
+                color = '#00e676';
+                statusText = '극도의 탐욕';
+            } else if (value >= 56) {
+                color = '#8bc34a';
+                statusText = '탐욕';
+            }
+
+            statusLabel.style.color = color;
+            statusLabel.innerText = statusText;
+            valueDisplay.style.color = color;
+            valueDisplay.innerText = value;
+        }
+
+        let refreshInterval;
+        let countdownSeconds = 600; // 10 minutes (600 seconds)
+
+        function startAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+
+            refreshInterval = setInterval(() => {
+                countdownSeconds--;
+                if (countdownSeconds <= 0) {
+                    updateDashboard();
+                    countdownSeconds = 600;
+                }
+                const mins = Math.floor(countdownSeconds / 60);
+                const secs = countdownSeconds % 60;
+                document.getElementById('refresh-timer').innerText = `다음 자동 새로고침: ${mins}분 ${secs}초 후`;
+            }, 1000);
+        }
+
+        async function updateDashboard() {
+            // Try to fetch live STOCK data from our internal data.json
+            try {
+                const response = await fetch('./data.json');
+                const jsonData = await response.json();
+                if (jsonData && jsonData.stock) {
+                    setGaugeValue('stock', jsonData.stock.score);
+                } else {
+                    setGaugeValue('stock', 36); // Final fallback
+                }
+            } catch (e) {
+                console.log('Using fallback for stock (data.json not found).');
+                setGaugeValue('stock', 36);
+            }
+
+            // Try to fetch live CRYPTO data
+            try {
+                const response = await fetch('https://api.alternative.me/fng/');
+                const data = await response.json();
+                if (data.data && data.data[0]) {
+                    const cryptoVal = parseInt(data.data[0].value);
+                    setGaugeValue('crypto', cryptoVal);
+                }
+            } catch (e) {
+                console.log('Using fallback for crypto.');
+                setGaugeValue('crypto', 8);
+            }
+
+            // Update last refresh time text
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ko-KR');
+            document.getElementById('last-refresh-time').innerText = `마지막 업데이트: ${timeStr}`;
+            countdownSeconds = 600; // Reset countdown
+        }
+
+        function translateStatus(status) {
+            const map = {
+                'Extreme Fear': '극도의 공포',
+                'Fear': '공포',
+                'Neutral': '중립',
+                'Greed': '탐욕',
+                'Extreme Greed': '극도의 탐욕'
+            };
+            return map[status] || status;
+        }
+
+        // Initial update
+        window.onload = () => {
+            setTimeout(() => {
+                updateDashboard();
+                startAutoRefresh();
+            }, 500);
+        };
+    </script>
+</body>
+
+</html>
