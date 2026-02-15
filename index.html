@@ -366,20 +366,22 @@
             <div class="card" id="cnn-card"
                 style="padding: 20px; justify-content: center; align-items: center; text-align: center;">
                 <div class="card-title" style="margin-bottom: 20px;">
-                    <span>🌐</span> CNN 공식 데이터
+                    <span>📸</span> CNN 실시간 스크린샷
                 </div>
                 <div
-                    style="background: rgba(255,255,255,0.03); border: 1px dashed var(--glass-border); border-radius: 16px; padding: 40px 20px; width: 100%;">
-                    <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 25px; line-height: 1.6;">
-                        CNN 보안 정책에 의해<br>이 화면에 직접 표시할 수 없습니다.
-                    </p>
-                    <a href="https://edition.cnn.com/markets/fear-and-greed" target="_blank" class="refresh-btn"
-                        style="text-decoration: none; display: inline-block; background: var(--text-primary); color: var(--bg-color); font-weight: 600; padding: 12px 25px; border: none;">
-                        CNN 공식 사이트 이동
+                    style="background: #fff; border: 1px solid var(--glass-border); border-radius: 16px; padding: 10px; width: 100%; overflow: hidden;">
+                    <img src="./cnn-gauge.png" alt="CNN Fear & Greed Gauge"
+                        style="width: 100%; height: auto; display: block;"
+                        onerror="this.src='https://via.placeholder.com/300x200?text=Wait+for+Action+to+Run'">
+                </div>
+                <div style="margin-top: 15px;">
+                    <a href="https://edition.cnn.com/markets/fear-and-greed" target="_blank"
+                        style="font-size: 0.8rem; color: var(--accent-greed); text-decoration: none; font-weight: 600;">
+                        원본 사이트 방문 →
                     </a>
                 </div>
-                <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 15px;">
-                    * 7가지 세부 지표와 차트 확인 가능
+                <p style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 10px;">
+                    * GitHub 서버가 매시간 촬영한 스크린샷입니다.
                 </p>
             </div>
         </div>

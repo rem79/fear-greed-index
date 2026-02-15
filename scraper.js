@@ -1,53 +1,53 @@
-const https = require('https');
+const { chromium } = require('playwright');
 const fs = require('fs');
 
-const CNN_URL = 'https://www.cnn.com/markets/fear-and-greed';
-
-function fetchData() {
-    return new Promise((resolve, reject) => {
-        const options = {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-            }
-        };
-
-        https.get(CNN_URL, options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => resolve(data));
-        }).on('error', (err) => reject(err));
-    });
-}
-
 async function run() {
+    let browser;
     try {
-        console.log('Fetching data from CNN...');
-        const html = await fetchData();
-        
-        // Regex to find "rating":"...", "score":...
-        const scoreMatch = html.match(/"score":(\d+\.?\d*)/);
-        const ratingMatch = html.match(/"rating":"(\w+)"/);
-        
-        const stockScore = scoreMatch ? parseFloat(scoreMatch[1]) : 36;
-        const stockRating = ratingMatch ? ratingMatch[1] : 'unknown';
+        console.log('Launching browser to capture CNN Fear & Greed index...');
+        browser = await chromium.launch();
+        const page = await browser.newPage();
 
-        console.log(`Stock Score Found: ${stockScore} (${stockRating})`);
+        // Mobile viewport helps capture a cleaner, more focused gauge
+        await page.setViewportSize({ width: 375, height: 812 });
+
+        await page.goto('https://www.cnn.com/markets/fear-and-greed', { waitUntil: 'networkidle' });
+
+        // Wait for the gauge to element to be visible
+        const selector = '.fear-and-greed-meter__container';
+        await page.waitForSelector(selector);
+
+        // Get the score text for data.json
+        const scoreElement = await page.$('.fear-and-greed-meter__value');
+        const scoreText = await scoreElement.innerText();
+        const score = parseFloat(scoreText) || 36;
+
+        const ratingElement = await page.$('.fear-and-greed-meter__rating');
+        const rating = await ratingElement.innerText();
+
+        // Capture screenshot of just the gauge
+        const element = await page.$(selector);
+        await element.screenshot({ path: 'cnn-gauge.png' });
+        console.log('Screenshot saved as cnn-gauge.png');
 
         const output = {
             stock: {
-                score: stockScore,
-                rating: stockRating,
+                score: score,
+                rating: rating.toLowerCase().trim(),
                 lastUpdated: new Date().toISOString()
             }
         };
 
         fs.writeFileSync('data.json', JSON.stringify(output, null, 2));
-        console.log('data.json has been updated successfully.');
+        console.log('data.json updated.');
 
     } catch (error) {
-        console.error('Error fetching or parsing data:', error);
+        console.error('Error:', error);
         process.exit(1);
+    } finally {
+        if (browser) await browser.close();
     }
 }
 
 run();
+

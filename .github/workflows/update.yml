@@ -26,5 +26,5 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add data.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update data.json [skip ci]" && git push)
+          git add data.json cnn-gauge.png
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update data and screenshot [skip ci]" && git push)
