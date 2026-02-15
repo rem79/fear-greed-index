@@ -13,27 +13,37 @@ async function run() {
 
         await page.goto('https://www.cnn.com/markets/fear-and-greed', { waitUntil: 'networkidle' });
 
-        // Wait for the gauge to element to be visible
-        const selector = '.fear-and-greed-meter__container';
-        await page.waitForSelector(selector);
+        // Wait for the gauge components to be ready
+        await page.waitForSelector('.fear-and-greed-meter__container');
 
-        // Get the score text for data.json
-        const scoreElement = await page.$('.fear-and-greed-meter__value');
-        const scoreText = await scoreElement.innerText();
-        const score = parseFloat(scoreText) || 36;
+        // Find the parent container that includes the "Fear & Greed Index" title
+        // Usually, this is a section tagged with a specific data attribute or a parent div
+        const containerSelector = '.fear-and-greed-meter__container';
 
-        const ratingElement = await page.$('.fear-and-greed-meter__rating');
-        const rating = await ratingElement.innerText();
+        // We'll zoom out slightly or adjust the clip to include the header "Fear & Greed Index"
+        // To be safe and get exactly what was shown in the screenshot:
+        const element = await page.$('.fear-and-greed-meter__container');
 
-        // Capture screenshot of just the gauge
-        const element = await page.$(selector);
-        await element.screenshot({ path: 'cnn-gauge.png' });
+        // Let's take a slightly larger screenshot by targeting the section or a bounding box
+        // CNN's structure often has the title just above the meter.
+        // We will try to capture the component including the header.
+        const indicator = await page.$('.fear-and-greed-indicator'); // Common parent for the whole module
+        const captureElement = indicator ? indicator : element;
+
+        await captureElement.screenshot({
+            path: 'cnn-gauge.png',
+            padding: 20 // Add some padding for a cleaner look
+        });
         console.log('Screenshot saved as cnn-gauge.png');
+
+        // Extract score/rating for data.json
+        const scoreText = await page.innerText('.fear-and-greed-meter__value');
+        const ratingText = await page.innerText('.fear-and-greed-meter__rating');
 
         const output = {
             stock: {
-                score: score,
-                rating: rating.toLowerCase().trim(),
+                score: parseFloat(scoreText) || 36,
+                rating: ratingText.toLowerCase().trim(),
                 lastUpdated: new Date().toISOString()
             }
         };
