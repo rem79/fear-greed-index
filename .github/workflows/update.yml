@@ -3,6 +3,9 @@ name: Auto Update Fear & Greed Index
 on:
   schedule:
     - cron: '0 * * * *' # Every hour
+  push:
+    branches:
+      - main
   workflow_dispatch: # Allow manual trigger
 
 jobs:
