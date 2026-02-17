@@ -93,17 +93,30 @@ async function run() {
 
         console.log(`추출 성공: ${data.score} (${data.rating})`);
 
-        // 2. 스크린샷 캡처 (정확한 영역 타겟팅)
-        const container = await page.$('.fear-and-greed-meter__container') ||
-            await page.$('.fear-and-greed-indicator');
+        // 2. 스크린샷 캡처 (정확하게 게이지 전체 포함)
+        const container = await page.$('.fear-and-greed-indicator') ||
+            await page.$('.fear-and-greed-meter__container');
 
         if (container) {
-            console.log('게이지 컨테이너 캡처 중...');
-            await container.screenshot({ path: 'cnn-gauge.png', padding: 15 });
+            console.log('게이지 컨테이너 캡처 중 (영역 확장)...');
+            const box = await container.boundingBox();
+            if (box) {
+                // 아래쪽 길이를 250px 더 넉넉하게 잡아 게이지 전체가 보이도록 함
+                await page.screenshot({
+                    path: 'cnn-gauge.png',
+                    clip: {
+                        x: Math.max(0, box.x - 10),
+                        y: Math.max(0, box.y - 10),
+                        width: box.width + 20,
+                        height: box.height + 250
+                    }
+                });
+                console.log('스크린샷 저장 성공 (길이 조정 완료).');
+            } else {
+                await container.screenshot({ path: 'cnn-gauge.png', padding: 50 });
+            }
         } else {
-            console.log('컨테이너를 찾을 수 없어 모바일 뷰로 변환 후 캡처...');
-            await page.setViewportSize({ width: 400, height: 800 });
-            await page.waitForTimeout(2000);
+            console.log('컨테이너를 찾을 수 없어 전체 화면 캡처...');
             await page.screenshot({ path: 'cnn-gauge.png' });
         }
 
