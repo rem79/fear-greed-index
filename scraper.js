@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 
+
 async function run() {
     let browser;
     try {
