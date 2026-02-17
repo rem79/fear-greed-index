@@ -1,86 +1,105 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 
-
 async function run() {
     let browser;
     try {
-        console.log('Launching browser to capture CNN Fear & Greed index...');
+        console.log('브라우저 실행 중 (CNN 공포와 탐욕 지수 캡처)...');
         browser = await chromium.launch({
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
         const context = await browser.newContext({
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            viewport: { width: 375, height: 1000 }
+            viewport: { width: 400, height: 1000 }
         });
         const page = await context.newPage();
 
-        console.log('Navigating to CNN Markets...');
+        console.log('CNN 마켓 페이지로 이동 중...');
         await page.goto('https://www.cnn.com/markets/fear-and-greed', {
             waitUntil: 'networkidle',
             timeout: 60000
         });
 
-        // Wait for any of the common selectors to appear
-        console.log('Waiting for gauge elements...');
-        let containerFound = false;
-        const selectors = ['.fear-and-greed-meter__container', '.fear-and-greed-indicator', '[class*="fear-and-greed"]'];
-
-        for (const selector of selectors) {
-            try {
-                await page.waitForSelector(selector, { timeout: 10000 });
-                console.log(`Found selector: ${selector}`);
-                containerFound = true;
-                break;
-            } catch (e) {
-                console.log(`Selector ${selector} not found, trying next...`);
+        // 1. 개인정보 동의(Cookie/Privacy) 팝업 제거
+        console.log('개인정보 동의 팝업 확인 및 제거 중...');
+        try {
+            // "Agree" 또는 "Accept" 버튼 찾아서 클릭
+            const agreeButton = await page.$('button#onetrust-accept-btn-handler') ||
+                await page.$('button:has-text("Agree")') ||
+                await page.$('button:has-text("Accept")');
+            if (agreeButton) {
+                await agreeButton.click();
+                console.log('팝업 버튼 클릭 완료.');
+                await page.waitForTimeout(2000); // 팝업이 사라질 때까지 대기
             }
+        } catch (e) {
+            console.log('팝업 제거 중 오류 발생 (무시하고 진행):', e.message);
         }
 
-        // Add a small delay for animations to settle
-        await page.waitForTimeout(5000);
+        // 2. 게이지 요소가 나타날 때까지 대기
+        console.log('게이지 요소 대기 중...');
+        const selectors = [
+            '.fear-and-greed-meter__container',
+            '.fear-and-greed-indicator',
+            '[class*="fear-and-greed"]'
+        ];
 
-        // Find the gauge container
-        const container = await page.$('.fear-and-greed-meter__container') ||
-            await page.$('.fear-and-greed-indicator') ||
-            await page.$('[class*="fear-and-greed"]');
+        let foundSelector = null;
+        for (const selector of selectors) {
+            try {
+                await page.waitForSelector(selector, { timeout: 15000 });
+                console.log(`요소 발견: ${selector}`);
+                foundSelector = selector;
+                break;
+            } catch (e) { }
+        }
 
+        // 애니메이션 안정화를 위해 조금 더 대기
+        await page.waitForTimeout(3000);
+
+        // 3. 스크린샷 캡처
+        const container = await page.$(foundSelector || 'body');
         if (container) {
             await container.screenshot({
                 path: 'cnn-gauge.png',
                 padding: 10
             });
-            console.log('Screenshot saved as cnn-gauge.png');
-        } else {
-            console.log('Could not find a suitable container for screenshot. Taking full page screenshot as fallback...');
-            await page.screenshot({ path: 'cnn-gauge.png' });
+            console.log('스크린샷 저장 완료: cnn-gauge.png');
         }
 
-        // Extract score/rating for data.json
+        // 4. 데이터 추출
         let score = 50;
         let rating = 'neutral';
 
         try {
-            const scoreElement = await page.$('.fear-and-greed-meter__value');
-            const ratingElement = await page.$('.fear-and-greed-meter__rating');
+            // 여러 Selector 시도
+            const scoreElement = await page.$('.fear-and-greed-meter__value') ||
+                await page.$('[class*="meter__value"]');
+            const ratingElement = await page.$('.fear-and-greed-meter__rating') ||
+                await page.$('[class*="meter__rating"]');
 
             if (scoreElement) {
                 const scoreText = await scoreElement.innerText();
-                score = parseFloat(scoreText) || 50;
+                const cleanScore = scoreText.replace(/[^0-9]/g, '');
+                if (cleanScore) score = parseFloat(cleanScore);
             }
             if (ratingElement) {
-                const ratingText = await ratingElement.innerText();
-                rating = ratingText.toLowerCase().trim();
+                rating = (await ratingElement.innerText()).toLowerCase().trim();
             }
-            console.log(`Extracted: ${score} (${rating})`);
+
+            // 만약 여전히 50(기본값)이라면 텍스트에서 강제로 찾기
+            if (score === 50) {
+                const bodyText = await page.innerText('body');
+                const match = bodyText.match(/Fear & Greed Index.*?(\d+)/i) || bodyText.match(/Now: (\d+)/i);
+                if (match) {
+                    score = parseFloat(match[1]);
+                    console.log('텍스트 검색으로 점수 발견:', score);
+                }
+            }
+
+            console.log(`추출된 데이터: 점수 ${score}, 상태 ${rating}`);
         } catch (e) {
-            console.log('Failed to extract data via specific selectors. Trying text content fallback...');
-            const pageText = await page.innerText('body');
-            const match = pageText.match(/Fear & Greed Index.*?(\d+)/i);
-            if (match) {
-                score = parseFloat(match[1]);
-                console.log('Found score in text content:', score);
-            }
+            console.log('데이터 추출 실패, 기본값 사용:', e.message);
         }
 
         const output = {
@@ -92,10 +111,10 @@ async function run() {
         };
 
         fs.writeFileSync('data.json', JSON.stringify(output, null, 2));
-        console.log('data.json updated successfully.');
+        console.log('data.json 업데이트 완료.');
 
     } catch (error) {
-        console.error('Error during scraping:', error);
+        console.error('스크래핑 중 치명적 오류 발생:', error);
         process.exit(1);
     } finally {
         if (browser) await browser.close();
