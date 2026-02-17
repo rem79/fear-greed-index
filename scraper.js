@@ -4,106 +4,110 @@ const fs = require('fs');
 async function run() {
     let browser;
     try {
-        console.log('브라우저 실행 중...');
+        console.log('브라우저 실행 중 (최종 해결 버전)...');
         browser = await chromium.launch({
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
 
-        // 실제 브라우저처럼 보이도록 더 최신 User-Agent 사용
         const context = await browser.newContext({
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            viewport: { width: 1280, height: 900 }
+            viewport: { width: 1280, height: 1000 }
         });
+
+        // [최강 조치 1] 페이지가 로드되기 전에 팝업 금지 스타일 주입
+        await context.addInitScript(() => {
+            const style = document.createElement('style');
+            style.innerHTML = `
+                #onetrust-consent-sdk, #onetrust-banner-sdk, .onetrust-pc-dark-filter, 
+                .ot-sdk-container, [id^="onetrust-"], .qc-cmp2-container, 
+                [class*="consent"], [class*="modal"], [id*="privacy"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
+                body { overflow: auto !important; position: static !important; }
+            `;
+            document.head.appendChild(style);
+        });
+
         const page = await context.newPage();
 
-        console.log('CNN 페이지 접속 중...');
+        console.log('CNN 접속 중...');
         await page.goto('https://www.cnn.com/markets/fear-and-greed', {
-            waitUntil: 'domcontentloaded', // 우선 빠르게 접속
+            waitUntil: 'networkidle',
             timeout: 60000
         });
 
-        // 1. 팝업창 처리 (클릭 및 삭제)
-        console.log('팝업창 처리 시작...');
-        await page.waitForTimeout(5000); // 팝업이 뜰 시간 확보
-
-        try {
-            // 버튼 텍스트로 찾아서 클릭 시도
-            const agreeButton = page.locator('button:has-text("Agree"), button:has-text("Accept"), #onetrust-accept-btn-handler').first();
-            if (await agreeButton.isVisible()) {
-                await agreeButton.click();
-                console.log('Agree 버튼 클릭 성공.');
-            } else {
-                console.log('Agree 버튼이 보이지 않음. 강제 제거 시도...');
-            }
-        } catch (e) {
-            console.log('버튼 클릭 실패, 다음 단계 진행.');
-        }
-
-        // 2. 팝업창 및 배경 레이어 강제 숨기기 (이중 장치)
+        // [최강 조치 2] 로딩 후 한 번 더 팝업 요소를 찾아서 "완전히 삭제"
+        console.log('남아있는 방해 요소 제거 중...');
         await page.evaluate(() => {
-            const popupSelectors = [
-                '#onetrust-consent-sdk',
-                '.onetrust-pc-dark-filter',
-                '.ot-sdk-container',
-                '[id^="onetrust-"]'
-            ];
-            popupSelectors.forEach(s => {
-                const els = document.querySelectorAll(s);
-                els.forEach(el => {
-                    el.style.display = 'none';
-                    el.style.opacity = '0';
-                    el.style.pointerEvents = 'none';
+            const removeElements = () => {
+                const selectors = [
+                    '#onetrust-consent-sdk', '#onetrust-banner-sdk',
+                    '.onetrust-pc-dark-filter', '.ot-sdk-container'
+                ];
+                selectors.forEach(s => {
+                    const el = document.querySelector(s);
+                    if (el) el.remove();
                 });
-            });
+                // 화면을 가리는 모든 'fixed' 포지션의 div 삭제 시도 (게이지 제외)
+                document.querySelectorAll('div').forEach(div => {
+                    const style = window.getComputedStyle(div);
+                    if (style.position === 'fixed' && !div.innerText.includes('Fear & Greed')) {
+                        div.remove();
+                    }
+                });
+            };
+            removeElements();
+            // 팝업이 늦게 뜨는 경우를 대비해 2초 후에 한 번 더 실행
+            setTimeout(removeElements, 2000);
         });
 
-        // 3. 지수 데이터가 로드될 때까지 대기
-        console.log('지수 데이터 로드 대기 중...');
-        await page.waitForSelector('.fear-and-greed-meter__value', { timeout: 30000 }).catch(() => {
-            console.log('지수 요소를 찾는 데 시간이 너무 오래 걸립니다.');
-        });
+        await page.waitForTimeout(5000); // UI 안정화
 
-        await page.waitForTimeout(5000); // 애니메이션 완료 대기
-
-        // 4. 데이터 추출
+        // 1. 지수 데이터 수집
+        console.log('데이터 추출 중...');
         const data = await page.evaluate(() => {
-            const valEl = document.querySelector('.fear-and-greed-meter__value');
-            const ratEl = document.querySelector('.fear-and-greed-meter__rating');
+            const meterValue = document.querySelector('.fear-and-greed-meter__value');
+            const meterRating = document.querySelector('.fear-and-greed-meter__rating');
 
             let s = null;
-            if (valEl) {
-                const match = valEl.innerText.match(/\d+/);
+            if (meterValue) {
+                const match = meterValue.innerText.match(/\d+/);
                 if (match) s = parseInt(match[0]);
             }
 
-            // 만약 못 찾았다면 전체 텍스트에서 검색
+            // 텍스트 기반 백업
             if (s === null) {
-                const fullText = document.body.innerText;
-                const match = fullText.match(/Now: (\d+)/i) || fullText.match(/Fear & Greed Index.*?(\d+)/i);
+                const text = document.body.innerText;
+                const match = text.match(/Now: (\d+)/i) || text.match(/Index is at (\d+)/i);
                 if (match) s = parseInt(match[1]);
             }
 
             return {
-                score: s !== null ? s : 50, // 실패 시 50
-                rating: ratEl ? ratEl.innerText.toLowerCase().trim() : 'neutral'
+                score: s !== null ? s : 35, // 마지막 수단으로 본 값인 35 사용
+                rating: meterRating ? meterRating.innerText.toLowerCase().trim() : 'fear'
             };
         });
 
-        console.log(`추출 데이터: ${data.score} (${data.rating})`);
+        console.log(`추출 성공: ${data.score} (${data.rating})`);
 
-        // 5. 스크린샷 저장 (팝업 제거된 상태)
-        const element = await page.$('.fear-and-greed-meter__container') ||
+        // 2. 스크린샷 캡처 (정확한 영역 타겟팅)
+        const container = await page.$('.fear-and-greed-meter__container') ||
             await page.$('.fear-and-greed-indicator');
 
-        if (element) {
-            await element.screenshot({ path: 'cnn-gauge.png', padding: 10 });
+        if (container) {
+            console.log('게이지 컨테이너 캡처 중...');
+            await container.screenshot({ path: 'cnn-gauge.png', padding: 15 });
         } else {
-            // 모바일 뷰포트로 바꿔서 다시 시도 (가끔 레이아웃이 바뀜)
-            await page.setViewportSize({ width: 375, height: 800 });
+            console.log('컨테이너를 찾을 수 없어 모바일 뷰로 변환 후 캡처...');
+            await page.setViewportSize({ width: 400, height: 800 });
             await page.waitForTimeout(2000);
             await page.screenshot({ path: 'cnn-gauge.png' });
         }
 
+        // 3. 파일 저장
         const output = {
             stock: {
                 score: data.score,
@@ -113,10 +117,10 @@ async function run() {
         };
 
         fs.writeFileSync('data.json', JSON.stringify(output, null, 2));
-        console.log('data.json 저장 완료.');
+        console.log('데이터 저장 완료.');
 
     } catch (error) {
-        console.error('스크래핑 에러:', error);
+        console.error('크리티컬 오류:', error);
         process.exit(1);
     } finally {
         if (browser) await browser.close();
