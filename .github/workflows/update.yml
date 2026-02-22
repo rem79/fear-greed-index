@@ -32,6 +32,15 @@ jobs:
 
       - name: Run scraper
         run: node scraper.js
+        timeout-minutes: 5
+
+      - name: Verify output
+        run: |
+          echo "=== data.json ==="
+          cat data.json
+          echo ""
+          echo "=== cnn-gauge.png size ==="
+          ls -la cnn-gauge.png || echo "Screenshot not found"
 
       - name: Commit and push if changed
         run: |

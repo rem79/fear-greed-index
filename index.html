@@ -486,13 +486,14 @@
                 const response = await fetch('./data.json?t=' + new Date().getTime());
                 if (!response.ok) throw new Error('Data file not found');
                 const jsonData = await response.json();
+                console.log('Stock data loaded:', jsonData);
                 if (jsonData && jsonData.stock) {
                     setGaugeValue('stock', jsonData.stock.score);
-                    document.getElementById('stock-last-updated').innerText = `최종 업데이트: ${new Date(jsonData.stock.lastUpdated).toLocaleDateString()}`;
+                    const dt = new Date(jsonData.stock.lastUpdated);
+                    document.getElementById('stock-last-updated').innerText = `최종 업데이트: ${dt.getFullYear()}. ${dt.getMonth() + 1}. ${dt.getDate()}.`;
                 }
             } catch (e) {
                 console.warn('Stock data fetch failed, using fallback or existing value.', e);
-                // Preserve hardcoded or current value
             }
 
             // 2. Try to fetch live CRYPTO data
